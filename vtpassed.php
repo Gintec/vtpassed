@@ -31,13 +31,19 @@ function vtpassedOperationsTable() {
     }
 }
 
-function my_scripts() {
-    wp_enqueue_style('bootstrap4', 'https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/css/bootstrap.min.css');
-    wp_enqueue_script( 'boot1','https://code.jquery.com/jquery-3.3.1.slim.min.js', array( 'jquery' ),'',true );
-    wp_enqueue_script( 'boot2','https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js', array( 'jquery' ),'',true );
-    wp_enqueue_script( 'boot3','https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/js/bootstrap.min.js', array( 'jquery' ),'',true );
+add_action('wp_head','head_code');
+
+function head_code()
+{
+$output = '<link rel="stylesheet" type="text/css" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/css/bootstrap.min.css">';
+$output .= '<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>';    
+$output .= '<script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.0/js/bootstrap.min.js"></script>'; 
+$output .= '<script src="http://code.jquery.com/ui/1.10.3/jquery-ui.js"></script>';
+$output .='<script src="https://js.paystack.co/v1/inline.js"></script>';
+
+echo $output;
+
 }
-add_action( 'admin_enqueue_scripts', 'my_scripts' );
 
 add_action('admin_menu', 'addAdminPageContent');
 function addAdminPageContent() {
@@ -104,10 +110,45 @@ function vtpassedAdminPage() {
 add_shortcode('topup_vtu', function(){
 global $wpdb; 
 $table_name = $wpdb->prefix . 'vtus';
-if(isset($_POST['Topup'])){
-    $username = "gintecservices@gmail.com"; //email address(sandbox@vtpass.com)
-    $password = "8610prayer"; //password (sandbox)
-    $host = 'http://sandbox.vtpass.com/api/payflexi';
+if(isset($_POST['Topup'])){ 
+$amount = $_POST['amount'];
+$recepient = $_POST['recepient'];
+$serviceID = $_POST['serviceID'];
+?>
+
+<h3>Enter Payment (Card) Information</h3>
+	<hr>
+	<p>
+		<?php echo strtoupper($_POST['serviceID']); ?> Recharge of <?php echo $_POST['amount']; ?> Naira Airtime to : <?php echo $_POST['recepient']; ?>
+	</p>
+    <div id="paystackEmbedContainer"></div>
+	<div id="topup"></div>
+</div>
+
+    <script>
+            PaystackPop.setup({
+            key: 'pk_test_9013537b2fb7899691364c7e25e68256303d3a97',
+            email: 'info@igreenmall.com',
+            amount: <?php echo $_POST['amount']; ?>00,
+            container: 'paystackEmbedContainer',
+            callback: function(response){
+				if(response.status=="success"){
+					
+					$("#topup").html('<h4 style="color: green;">Your payment was successful please click Continue to complete your transaction.</h4><form action="" method="post"><input type="hidden" name="serviceID" value="<?php echo $serviceID; ?>"><input type="hidden" name="recepient" value="<?php echo $recepient; ?>"><input type="hidden" name="amount" value="<?php echo $amount; ?>"><input type="submit" name="Topup2" value="Continue" class="btn btn-success"></form>');
+				}    
+                },
+            });  
+    </script>
+	<input action="action" onclick="window.history.go(-1); return false;" type="submit" value="Go Back" />
+
+
+
+<?php }else
+	if(isset($_POST['Topup2'])){
+    $username = "info@igreenmall.com"; //email address(sandbox@vtpass.com)
+    $password = "Pureweb2$"; //password (sandbox)
+	$host = "https://vtpass.com/api/pay";
+    //$host = 'http://sandbox.vtpass.com/api/payflexi';
 
 if ( is_user_logged_in() ) {
 
@@ -154,26 +195,28 @@ CURLOPT_URL => $host,
     CURLOPT_CUSTOMREQUEST => "POST",
     CURLOPT_POSTFIELDS => $data,
 ));
-echo $vdata = curl_exec($curl);
+$vdata = curl_exec($curl);
 curl_close($curl);   
 $res = json_decode($vdata , true); 
-
+// var_dump($res);
 // Insert to Database
 
-	if($res[0]->code=="000"){
-		$amount = $res[0]->content[0]->amount;
-		$dated = $res[0]->content[0]->created_date[0]->date;
-		$status = $res[0]->content[0]->response_description;
-	  $wpdb->query("INSERT INTO $table_name(name,ttype,user_email,tid,amount,dated,status) VALUES('$name','Airtime','$user_email',0,'$amount','$dated','$status')");
+	if($res['code']=="000"){
+		$amount = $_POST['amount'];
+		$dated = date("Y-m-d H:m:s");
+		$status = $res['response_description'];
+		$product = $res['content']['transactions']['product_name'];
+		$particulars = $res['content']['transactions']['transactionId']." - ".$res['requestId'];
+	  $wpdb->query("INSERT INTO $table_name(name,ttype,user_email,tid,amount,dated,status) VALUES('$name','$product','$user_email','$particulars','$amount','$dated','$status')");
 	}else{
-		$wpdb->query("INSERT INTO $table_name(name,ttype,user_email,tid,amount,dated,status) VALUES('$name','Airtime','$user_email',0,'-',NOW(),'Error')");
+		$wpdb->query("INSERT INTO $table_name(name,ttype,user_email,tid,amount,dated,status) VALUES('$name','Airtime','$user_email',0,'-',NOW(),'$status')");
 	}
   if($status=="TRANSACTION SUCCESSFUL"){
       $astatus = "success";
-      $tstatus = "successful";
+      $tstatus = "successful (".$res['response_description'].")";
   }else{
     $astatus = "danger";
-    $tstatus = "NOT successful";
+    $tstatus = "NOT successful (".$res['response_description'].")";
   }
   ?>
 
@@ -181,18 +224,18 @@ $res = json_decode($vdata , true);
         <h3><?php echo $status; ?></h3><hr>
         <p>Your airtime recharge was <?php echo $tstatus; ?></p>
   </div>
-<?php }
+<?php }else{ ?>
+	<h2>Recharge Phone Airtime</h2>
 
-?>
-    <h2>Recharge Phone Airtime</h2>
     <hr>
     <form action="" method="post">
+		
         <input type="hidden" name="Topup" value="Topup">
         <div class="row">
            
             <div class="col-md-6 form-group">
                 <label for="amount">Enter Amount</label>
-                <input id="amount" class="form-control" type="number" name="Enter Amount" required>
+                <input id="amount" class="form-control" type="number" name="amount" placeholder="Enter Amount" value="0" required>
             </div>
 
             <div class="col-md-6 form-group">
@@ -215,154 +258,211 @@ $res = json_decode($vdata , true);
                 <input id="phone" class="form-control" type="number" name="recepient" placeholder="Enter Phone Number" required>
             </div>
             <div class="col-md-6 form-group">                
-                <button type="submit" class="btn btn-primary">Go</button>                
+                <button type="submit" class="btn btn-primary"  onclick="payWithPaystack()">Go</button>                
             </div>
         </div>
-
-        
+		
     </form>
-<?php } );
-
-
-add_shortcode('tv_vtu', function(){
-global $wpdb; 
-$table_name = $wpdb->prefix . 'vtus';
-if(isset($_POST['tvsub'])){
-
-    $serviceid =  $_POST['serviceID'];
-    $billerscode =  $_POST['billersCode'];
-    $variation_code =  $_POST['variation_code'];
-    $username = "gintecservices@gmail.com"; //email address(sandbox@vtpass.com)
-    $password = "8610prayer"; //password (sandbox)
-    $host = 'http://sandbox.vtpass.com/api/payfix';
-
-if ( is_user_logged_in() ) {
-
-    global $current_user;
-    get_currentuserinfo();
-    
-        /* echo 'Username: ' . $current_user->user_login . "
-    ";
-        echo 'User email: ' . $current_user->user_email . "
-    ";
-        echo 'User first name: ' . $current_user->user_firstname . "
-    ";
-        echo 'User last name: ' . $current_user->user_lastname . "
-    ";
-        echo 'User display name: ' . $current_user->display_name . "
-    ";
-        echo 'User ID: ' . $current_user->ID . "        ";
-    */
-    
-    $vtuser = $current_user->user_nicename."-";
-    $name = $vtuser = $current_user->user_nicename;
-    $user_email = $current_user->user_email;
-}else{
-    $vtuser = "Guest-";
-    $name = "Guest";
-    $user_email = "Guest";
-}
-
-$data = array(
-    'serviceID'=> $_POST['serviceID'], //integer e.g gotv,dstv,eko-electric,abuja-electric
-    'billersCode'=> $_POST['billersCode'], // e.g smartcardNumber, meterNumber,
-    'variation_code'=> $_POST['variation_code'], // e.g dstv1, dstv2,prepaid,(optional for somes services)
-    'amount' =>  $_POST['amount'], // integer (optional for somes services)
-    'phone' => $_POST['recepient'], //integer
-    'request_id' => strtoupper($billerscode).substr(md5(uniqid(mt_rand(), true).microtime(true)),0, 8)
-);
-
-$curl = curl_init();
-curl_setopt_array($curl, array(
-CURLOPT_URL => $host,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_ENCODING => "",
-    CURLOPT_MAXREDIRS => 10,
-    CURLOPT_USERPWD => $username.":" .$password,
-    CURLOPT_TIMEOUT => 30,
-    CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-    CURLOPT_CUSTOMREQUEST => "POST",
-    CURLOPT_POSTFIELDS => $data,
-));
-echo $vdata = curl_exec($curl);
-curl_close($curl);   
-$res = json_decode($vdata , true); 
-
-// Insert to Database
-
-	if($res[0]->code=="000"){
-		$amount = $res[0]->content[0]->amount;
-		$dated = $res[0]->content[0]->created_date[0]->date;
-		$status = $res[0]->content[0]->response_description;
-	  $wpdb->query("INSERT INTO $table_name(name,ttype,user_email,tid,amount,dated,status) VALUES('$name','$serviceid.$variation_code','$user_email',0,'$amount','$dated','$status')");
-	}else{
-		$wpdb->query("INSERT INTO $table_name(name,ttype,user_email,tid,amount,dated,status) VALUES('$name','$serviceid.$variation_code','$user_email',0,'-',NOW(),'Error')");
-	}
-  if($status=="TRANSACTION SUCCESSFUL"){
-      $astatus = "success";
-      $tstatus = "successful";
-  }else{
-    $astatus = "danger";
-    $tstatus = "NOT successful";
-  }
-  ?>
-
-  <div class="alert alert-<?php echo $astatus; ?>" role="alert">
-        <h3><?php echo $status; ?></h3><hr>
-        <p>Your airtime recharge was <?php echo $tstatus; ?></p>
-  </div>
-<?php }
+	<?php }
 
 ?>
-    <h2>Pay TV Subscription</h2>
-    <hr>
-    <form action="" method="post">
-        <input type="hidden" name="tvsub" value="tvsub">
-        <div class="row">
-           
-            <div class="col-md-6 form-group">
-                <label for="amount">Enter Amount</label>
-                <input id="amount" class="form-control" type="number" name="Enter Amount" required>
-            </div>
-
-            <div class="col-md-6 form-group">
-                <label for="operator">Select Provider</label>
-                
-                <select name="serviceID" id="operator" class="form-control" required="required">
-                    <option value="dstv">GOTV Payment</option>
-                    <option value="gotv" selected>DSTV Subscription</option>
-                    <option value="startimes">Startimes Subscription</option>
-                    
-                </select>
-                
-            </div>
-            
-        </div>
-        <div class="row">
-            <div class="col-md-6 form-group">
-                <label for="billerscode">Enter Smartcard Number</label>
-                <input id="billerscode" class="form-control" type="number" name="billerscode" placeholder="Enter Phone Number" required>
-            </div>
-            <div class="col-md-6 form-group">
-                <label for="phone">Select Category</label>
-                <select name="variation_code" id="variation_code">
-                    <option value="dstv1">DSTV 1</option>
-                    <option value="dstv2">DSTV 2</option>
-                    <option value="gotv-lite">GOTV Lite</option>
-                    <option value="gotv-value">GOTV Value</option>
-                    <option value="nova">Startimes Nova</option>
-                    <option value="basic">Startimes Basic</option>
-                </select>
-            </div>
-            
-        </div>
-
-        <div class="row">
-        <div class="col-md-6 form-group">                
-                <button type="submit" class="btn btn-primary">Go</button>                
-            </div>
-        </div>
-
-        
-    </form>
 <?php } );
+
+add_shortcode('tv_subscription', function(){
+    global $wpdb; 
+    $table_name = $wpdb->prefix . 'vtus';
+    if(isset($_POST['Subscribe'])){ 
+    $amount = $_POST['amount'];
+    $recepient = $_POST['recepient'];
+    $serviceID = $_POST['serviceID'];
+    $variation_code = $_POST['variation_code'];
+    $billersCode = $_POST['billersCode'];
+    ?>
+    
+    <h3>Enter Payment (Card) Information</h3>
+        <hr>
+        <p>
+            <?php echo strtoupper($_POST['serviceID']); ?> Subscription of <?php echo $_POST['amount']; ?> Naira  to : <?php echo $_POST['billersCode']; ?>
+        </p>
+        <div id="paystackEmbedContainer"></div>
+        <div id="topup"></div>
+    </div>
+    
+        <script>
+                PaystackPop.setup({
+                key: 'pk_test_9013537b2fb7899691364c7e25e68256303d3a97',
+                email: 'info@igreenmall.com',
+                amount: <?php echo $_POST['amount']; ?>00,
+                container: 'paystackEmbedContainer',
+                callback: function(response){
+                    if(response.status=="success"){
+                        
+                        $("#topup").html('<h4 style="color: green;">Your payment was successful please click Continue to complete your transaction.</h4><form action="" method="post"><input type="hidden" name="serviceID" value="<?php echo $serviceID; ?>"><input type="hidden" name="recepient" value="<?php echo $recepient; ?>"><input type="hidden" name="amount" value="<?php echo $amount; ?>"><input type="hidden" name="billersCode" value="<?php echo $billersCode; ?>"><input type="hidden" name="variation_code" value="<?php echo $variation_code; ?>"><input type="submit" name="Subscribe2" value="Continue" class="btn btn-success"></form>');
+                    }    
+                    },
+                });  
+        </script>
+        <input action="action" onclick="window.history.go(-1); return false;" type="submit" value="Go Back" />
+    
+    
+    
+    <?php }else
+        if(isset($_POST['Subscribe2'])){
+        $username = "info@igreenmall.com"; //email address(sandbox@vtpass.com)
+        $password = "Pureweb2$"; //password (sandbox)
+        $host = "https://vtpass.com/api/service-variations";
+       
+        //$host = 'http://sandbox.vtpass.com/api/payflexi';
+    
+    if ( is_user_logged_in() ) {
+    
+        global $current_user;
+        get_currentuserinfo();
+        
+            /* echo 'Username: ' . $current_user->user_login . "
+        ";
+            echo 'User email: ' . $current_user->user_email . "
+        ";
+            echo 'User first name: ' . $current_user->user_firstname . "
+        ";
+            echo 'User last name: ' . $current_user->user_lastname . "
+        ";
+            echo 'User display name: ' . $current_user->display_name . "
+        ";
+            echo 'User ID: ' . $current_user->ID . "        ";
+        */
+        
+        $vtuser = $current_user->user_nicename."-";
+        $name = $vtuser = $current_user->user_nicename;
+        $user_email = $current_user->user_email;
+    }else{
+        $vtuser = "Guest-";
+        $name = "Guest";
+        $user_email = "Guest";
+    }
+    
+    $data = array(
+        'serviceID'=> $_POST['serviceID'], //integer e.g mtn,airtel
+        'amount' =>  $_POST['amount'], // integer
+        'phone' => $_POST['recepient'], //integer
+        'billersCode'=> $_POST['billersCode'], // e.g smartcardNumber, meterNumber,
+      	'variation_code'=> $_POST['variation_code'], // e.g dstv1, dstv2,prepaid,(optional for somes services)
+        'request_id' => strtoupper($vuser).substr(md5(uniqid(mt_rand(), true).microtime(true)),0, 8)
+    );
+    $curl = curl_init();
+    curl_setopt_array($curl, array(
+    CURLOPT_URL => $host,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_ENCODING => "",
+        CURLOPT_MAXREDIRS => 10,
+        CURLOPT_USERPWD => $username.":" .$password,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+        CURLOPT_CUSTOMREQUEST => "POST",
+        CURLOPT_POSTFIELDS => $data,
+    ));
+    $vdata = curl_exec($curl);
+    curl_close($curl);   
+    $res = json_decode($vdata , true); 
+    // var_dump($res);
+    // Insert to Database
+    
+        if($res['code']=="000"){
+            $amount = $_POST['amount'];
+            $dated = date("Y-m-d H:m:s");
+            $status = $res['response_description'];
+            $product = $res['content']['transactions']['type'];
+            $particulars = $res['content']['transactions']['transactionId']." - ".$res['requestId'];
+          $wpdb->query("INSERT INTO $table_name(name,ttype,user_email,tid,amount,dated,status) VALUES('$name','$product','$user_email','$particulars','$amount','$dated','$status')");
+        }else{
+            $wpdb->query("INSERT INTO $table_name(name,ttype,user_email,tid,amount,dated,status) VALUES('$name','TV Subscription','$user_email',0,'-',NOW(),'$status')");
+        }
+      if($status=="TRANSACTION SUCCESSFUL"){
+          $astatus = "success";
+          $tstatus = "successful (".$res['response_description'].")";
+      }else{
+        $astatus = "danger";
+        $tstatus = "NOT successful (".$res['response_description'].")";
+      }
+      ?>
+    
+      <div class="alert alert-<?php echo $astatus; ?>" role="alert">
+            <h3><?php echo $status; ?></h3><hr>
+            <p>Your TV Subscription was <?php echo $tstatus; ?></p>
+      </div>
+    <?php }else{ ?>
+        <h2>Pay TV Subscription</h2>
+    
+        <hr>
+        <form action="" method="post">
+            
+            <input type="hidden" name="Topup" value="Topup">
+            <div class="row">
+               
+                <div class="col-md-6 form-group">
+                    <label for="amount">Enter Amount</label>
+                    <input id="amount" class="form-control" type="number" name="amount" placeholder="Enter Amount" value="0" required>
+                </div>
+    
+                <div class="col-md-6 form-group">
+                    <label for="operator">Select TV Network</label>
+                    
+                    <select name="serviceID" id="operator" class="form-control" required="required">
+                        <option value="dstv">DSTV Subscription</option>
+                        <option value="gotv" selected>GOTV Payment</option>
+                        <option value="startimes">Startimes Subscription</option>                        
+                    </select>
+                    
+                </div>
+                
+            </div>
+
+            <div class="row">
+               
+                <div class="col-md-6 form-group">
+                    <label for="billersCode">Enter SmartCard number</label>
+                    <input id="billersCode" class="form-control" type="number" name="billersCode" placeholder="Enter SmartCard number" value="0" required>
+                </div>
+    
+                <div class="col-md-6 form-group">
+                    <label for="operator">Select Bouquet</label>
+                    <?php
+                
+                $startimes = wp_remote_retrieve_body( wp_remote_get( 'https://vtpass.com/api/service-variations?serviceID=startimes' ) );
+
+						
+					?>
+					
+					<select name="variation_code">
+                    <option value="Select Bouquet" selected>Select Bouquet</option>
+                    <optgroup label="Startimes Bouquets">
+                        <?php
+                           
+                            foreach($startimes['content']['variations'] as $vars){
+                                echo "<option value=".$vars->code.">".$vars->code."</option>";
+                            }
+
+                        ?>
+                    </optgroup>
+                    </select>
+                             
+                </div>
+                
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 form-group">
+                    <label for="phone">Enter Phone Number</label>
+                    <input id="phone" class="form-control" type="number" name="recepient" placeholder="Enter Phone Number" required>
+                </div>
+                <div class="col-md-6 form-group">                
+                    <button type="submit" class="btn btn-primary"  onclick="payWithPaystack()">Go</button>                
+                </div>
+            </div>
+            
+        </form>
+        <?php }
+    
+    ?>
+    <?php } );
+    
